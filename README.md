@@ -7,11 +7,11 @@ A link to the online Pintos documentation [can be found here](http://web.stanfor
 
 
 ## Repository Setup
-Name: Tommy Trojan
+Name: Bryce Roski Amendola
 
-Email: ttrojan@usc.edu
+Email: bryceros@usc.edu
 
-ID: 1234567890
+ID: 8816405770
 
 ## Important Dates
 <strong>Project 1 Due:</strong> February 9
