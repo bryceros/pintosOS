@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "synch.h"
+#include "filesys/file.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -81,6 +82,21 @@ typedef int tid_t;
    only because they are mutually exclusive: only a thread in the
    ready state is on the run queue, whereas only a thread in the
    blocked state is on a semaphore wait list. */
+   struct grave
+   {
+     int exit_status;
+     bool waited_before;
+     tid_t child_tid;
+     struct list_elem grave_elem;             
+
+   };
+  struct thread_file
+  {
+    struct file* this_file;
+    int fd;                     /* Project 2.2 file that the thread owns*/
+    struct list_elem file_elem; /* Project 2.2 file that the thread owns*/
+  };
+
 struct thread
   {
     /* Owned by thread.c. */
@@ -91,10 +107,23 @@ struct thread
     int64_t sleeptick;                  /* Project 1 Part 1 counts how many ticks to sleep*/
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
+
+    struct file* process_file;
     struct thread* parent;
+    int exit_status;
+    bool file_success;
+    struct list child_list;
+    struct list grave_list;
+
+    struct list_elem child_elem;             
+
     struct semaphore sema;
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
+
+    /*list of all files this thread owns*/
+    int count_fd;
+    struct list file_list;                  /* Project 2.2*/
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -117,7 +146,7 @@ void thread_tick (void);
 void thread_print_stats (void);
 
 typedef void thread_func (void *aux);
-tid_t thread_create (const char *name, int priority, thread_func *, void *);
+tid_t thread_create (const char *name,const char *file_name,int priority, thread_func *, void *);
 
 void thread_block (void);
 void thread_unblock (struct thread *);
@@ -143,5 +172,19 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+int thread_add_file(struct file* file);
+void thread_remove_file(struct thread_file* remove_file);
+struct file* thread_get_file_by_id(int fd);
+struct thread_file* thread_get_thread_file_by_id(int fd);
+
+struct thread* thread_get_child(tid_t);
+
+
+void thread_add_to_parent_grave(void);
+struct grave* thread_get_grave(tid_t);
+
+bool thread_set_process_file(struct thread*,struct file*);
+void thread_unset_process_file(void);
 
 #endif /* threads/thread.h */

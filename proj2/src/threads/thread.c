@@ -11,6 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include <stdlib.h>
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -44,6 +45,8 @@ struct kernel_thread_frame
     thread_func *function;      /* Function to call. */
     void *aux;                  /* Auxiliary data for function. */
   };
+
+
 
 /* Statistics. */
 static long long idle_ticks;    /* # of timer ticks spent idle. */
@@ -98,8 +101,6 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
-  sema_init(&initial_thread->sema,0);
-
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -110,7 +111,7 @@ thread_start (void)
   /* Create the idle thread. */
   struct semaphore idle_started;
   sema_init (&idle_started, 0);
-  thread_create ("idle", PRI_MIN, idle, &idle_started);
+  thread_create ("idle",NULL,PRI_MIN, idle, &idle_started);
 
   /* Start preemptive thread scheduling. */
   intr_enable ();
@@ -165,7 +166,7 @@ thread_print_stats (void)
    PRIORITY, but no actual priority scheduling is implemented.
    Priority scheduling is the goal of Problem 1-3. */
 tid_t
-thread_create (const char *name, int priority,
+thread_create (const char *name, const char *file_name, int priority,
                thread_func *function, void *aux) 
 {
   struct thread *t;
@@ -192,6 +193,8 @@ thread_create (const char *name, int priority,
   kf->aux = aux;
   
   t->parent = thread_current();
+    list_push_back (&t->parent->child_list, &t->child_elem);
+
 
   /* Stack frame for switch_entry(). */
   ef = alloc_frame (t, sizeof *ef);
@@ -202,9 +205,14 @@ thread_create (const char *name, int priority,
   sf->eip = switch_entry;
   sf->ebp = 0;
 
+  if(file_name !=NULL)
+    {
+      if(thread_set_process_file(t,filesys_open (file_name)) == false)
+      {
+      }
+    }
   /* Add to run queue. */
   thread_unblock (t);
-
   return tid;
 }
 
@@ -285,15 +293,16 @@ void
 thread_exit (void) 
 {
   ASSERT (!intr_context ());
+    intr_disable ();
+
 #ifdef USERPROG
   process_exit ();
 #endif
-
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
-  intr_disable ();
-  sema_up(&thread_current()->parent->sema);
+ // sema_up(&thread_current()->parent->sema);
+  thread_unset_process_file();
 
   list_remove (&thread_current()->allelem);
   thread_current ()->status = THREAD_DYING;
@@ -474,6 +483,13 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
+  t->count_fd = 2;
+  t->exit_status = -1;
+
+  sema_init(&t->sema,0);
+  list_init(&t->child_list);
+  list_init(&t->grave_list);
+  list_init (&t->file_list);
   t->magic = THREAD_MAGIC;
 
 
@@ -592,6 +608,111 @@ allocate_tid (void)
   return tid;
 }
 
+int 
+thread_add_file(struct file* f)
+{
+  struct thread_file* add_file = malloc(sizeof(struct thread_file));
+  add_file->fd = thread_current()->count_fd++;
+  add_file->this_file = f;
+  list_push_back (&thread_current()->file_list, &add_file->file_elem);
+  return add_file->fd;
+}
+void 
+thread_remove_file(struct thread_file* remove_file)
+{
+  list_remove(&remove_file->file_elem);
+}
+
+struct file* 
+thread_get_file_by_id(int fd)
+{
+    if(!list_empty(&thread_current()->file_list))
+    {
+    struct list_elem* iter;
+      for(iter = list_begin(&thread_current()->file_list);
+          iter != list_end(&thread_current()->file_list);
+          iter = list_next(iter))
+          {
+            struct thread_file* get_file = list_entry(iter, struct thread_file, file_elem);
+            if(get_file->fd == fd) return get_file->this_file;
+          }
+   }
+   return NULL;
+}
+struct thread_file* 
+thread_get_thread_file_by_id(int fd)
+{
+    if(!list_empty(&thread_current()->file_list))
+    {
+    struct list_elem* iter;
+      for(iter = list_begin(&thread_current()->file_list);
+          iter != list_end(&thread_current()->file_list);
+          iter = list_next(iter))
+          {
+            struct thread_file* get_file = list_entry(iter, struct thread_file, file_elem);
+            if(get_file->fd == fd) return get_file;
+          }
+   }
+   return NULL;
+}
+struct thread* 
+thread_get_child(tid_t tid)
+{
+    if(!list_empty(&thread_current()->child_list))
+    {
+    struct list_elem* iter;
+      for(iter = list_begin(&thread_current()->child_list);
+          iter != list_end(&thread_current()->child_list);
+          iter = list_next(iter))
+          {
+            struct thread* get_child = list_entry(iter, struct thread, child_elem);
+            if(get_child->tid == tid) return get_child;
+          }
+   }
+   return NULL;
+}
+void 
+thread_add_to_parent_grave()
+{
+    struct grave* add_grave = malloc(sizeof(struct grave));
+    add_grave->exit_status = thread_current()->exit_status;
+    add_grave->waited_before = false;
+    add_grave->child_tid = thread_current()->tid;
+    list_push_back (&thread_current()->parent->grave_list, &add_grave->grave_elem);
+}
+struct grave* 
+thread_get_grave(tid_t tid)
+{
+    if(!list_empty(&thread_current()->grave_list))
+    {
+    struct list_elem* iter;
+      for(iter = list_begin(&thread_current()->grave_list);
+          iter != list_end(&thread_current()->grave_list);
+          iter = list_next(iter))
+          {
+            struct grave* get_grave = list_entry(iter, struct grave, grave_elem);
+            if(get_grave->child_tid == tid) return get_grave;
+          }
+   }
+   return NULL;
+
+}
+
+
+bool 
+thread_set_process_file(struct thread* t,struct file* f){
+  t->process_file = f;
+  if(t->process_file == NULL)return false;
+  else inode_deny_write (t->process_file->inode);
+  return true;
+}
+void 
+thread_unset_process_file()
+{
+  if(thread_current()->process_file != NULL)inode_allow_write(thread_current()->process_file->inode);
+}
+
+
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);

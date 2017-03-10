@@ -30,22 +30,42 @@ tid_t
 process_execute (const char *file_name) 
 {
   char *fn_copy;
+
   tid_t tid;   
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
+
   if (fn_copy == NULL)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
+
   /* Create a new thread to execute FILE_NAME. */
   // Project 2 Part 1 created exec_name and passed it in to the thread
-  char *save_dummy;
-  char* exec_name = strtok_r(file_name, " ", &save_dummy);
-  tid = thread_create (exec_name, PRI_DEFAULT, start_process, fn_copy);
+   char *save_dummy;
+   char* exec_name = strtok_r(file_name, " ", &save_dummy);
+  
+  //printf("Creating %s\n", file_name);
+  tid = thread_create (exec_name,exec_name,PRI_DEFAULT, start_process, fn_copy);
+
+  //sema_down(&thread_current()->sema);
+  //thread_set_process_file(thread_get_child(tid),filesys_open (fn_copy2));
+  /*struct file* f = filesys_open (fn_copy2);
+  if(f == NULL) return -1;
+  else file_deny_write (f);*/
+
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
+
+    sema_down(&thread_current()->sema);
+  struct thread* thread_child = thread_get_child(tid);
+  if(thread_child->file_success == false) 
+  {
+    tid = -1;
+  }
+  sema_up(&thread_child->sema);
   return tid;
 }
 
@@ -66,6 +86,9 @@ start_process (void *file_name_)
 
 
   success = load (file_name, &if_.eip, &if_.esp);
+  thread_current()->file_success = success;
+  sema_up(&thread_current()->parent->sema);
+  sema_down(&thread_current()->sema);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
@@ -92,20 +115,37 @@ start_process (void *file_name_)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid) 
 {
   // Project 2 Part 1 need to modify this
-  sema_down(&thread_current()->sema);
-  return 0;
+  struct thread* child_thread = thread_get_child(child_tid);
+  if(child_thread != NULL)
+  {
+      sema_down(&thread_current()->sema);
+  }
+  struct grave* child_grave = thread_get_grave(child_tid);
+  if(child_grave != NULL)
+  {
+    if(child_grave->waited_before == true) return -1;
+    else
+      {
+        child_grave->waited_before = true;
+        return child_grave->exit_status;
+      }
+  }
+  return -1;
 }
 
 /* Free the current process's resources. */
 void
-process_exit (void)
+process_exit ()
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
+      list_remove(&cur->child_elem);
+      thread_add_to_parent_grave();
+    sema_up(&thread_current()->parent->sema);
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
@@ -122,6 +162,7 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+
 }
 
 /* Sets up the CPU for running user code in the current
@@ -241,7 +282,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
       printf ("load: %s: open failed\n", file_name);
       goto done; 
     }
-
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
       || memcmp (ehdr.e_ident, "\177ELF\1\1\1", 7)
