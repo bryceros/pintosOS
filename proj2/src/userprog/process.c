@@ -50,7 +50,7 @@ process_execute (const char *file_name)
   //printf("Creating %s\n", file_name);
   tid = thread_create (exec_name,exec_name,PRI_DEFAULT, start_process, fn_copy);
 
-  //sema_down(&thread_current()->sema);
+  //sema_down(&thread_current()->born_sema);
   //thread_set_process_file(thread_get_child(tid),filesys_open (fn_copy2));
   /*struct file* f = filesys_open (fn_copy2);
   if(f == NULL) return -1;
@@ -59,13 +59,13 @@ process_execute (const char *file_name)
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
 
-    sema_down(&thread_current()->sema);
+  sema_down(&thread_current()->born_sema);
   struct thread* thread_child = thread_get_child(tid);
   if(thread_child->file_success == false) 
   {
     tid = -1;
   }
-  sema_up(&thread_child->sema);
+  sema_up(&thread_child->born_sema);
   return tid;
 }
 
@@ -87,8 +87,8 @@ start_process (void *file_name_)
 
   success = load (file_name, &if_.eip, &if_.esp);
   thread_current()->file_success = success;
-  sema_up(&thread_current()->parent->sema);
-  sema_down(&thread_current()->sema);
+  sema_up(&thread_current()->parent->born_sema);
+  sema_down(&thread_current()->born_sema);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
@@ -121,7 +121,8 @@ process_wait (tid_t child_tid)
   struct thread* child_thread = thread_get_child(child_tid);
   if(child_thread != NULL)
   {
-      sema_down(&thread_current()->sema);
+    //sema_down(&thread_current()->sema);
+      sema_down(&child_thread->sema);
   }
   struct grave* child_grave = thread_get_grave(child_tid);
   if(child_grave != NULL)
@@ -145,7 +146,8 @@ process_exit ()
 
       list_remove(&cur->child_elem);
       thread_add_to_parent_grave();
-    sema_up(&thread_current()->parent->sema);
+      //sema_up(&cur->parent->sema);
+    sema_up(&thread_current()->sema);
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;

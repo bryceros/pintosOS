@@ -118,6 +118,8 @@ struct thread
     struct list_elem child_elem;             
 
     struct semaphore sema;
+    struct semaphore born_sema;
+
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 

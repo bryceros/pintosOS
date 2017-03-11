@@ -42,9 +42,11 @@ exit(int status)
 pid_t // need to do
 exec(const char* cmd_line)
 {
-	char* cmd_line2 = malloc(strlen(cmd_line));
+	char* cmd_line2 = malloc(strlen(cmd_line)+1);
 	memcpy(cmd_line2, cmd_line, strlen(cmd_line)+1);
-	return process_execute(cmd_line2);
+	pid_t temp = process_execute (cmd_line2);
+	free (cmd_line2);
+	return temp;
 }
 int // need to do
 wait(pid_t pid)
@@ -103,13 +105,15 @@ read(int fd, void* buffer, unsigned sized)
 	int offset = -1;
 	struct file* read_file;
 
-	lock_acquire(&file_lock);
+	
 	if(fd == 0){
 		input_getc(buffer,sized);
-		lock_release(&file_lock);
+		//lock_release(&file_lock);
 		return sized;
 	}
-	else if((read_file = thread_get_file_by_id(fd)) != NULL)
+	lock_acquire(&file_lock);
+	read_file = thread_get_file_by_id(fd);
+	if(read_file != NULL)
 	{
 		offset = file_read(read_file,buffer,sized);
 	}
@@ -122,19 +126,19 @@ write(int fd, const void* buffer, unsigned sized)
 	//printf("file_id: %d\n",fd);
 	int offset = 0;
 	struct file* write_file;
-	lock_acquire(&file_lock);
 
 	if(fd == 1){
 
 		putbuf(buffer,sized);
-		lock_release(&file_lock);
+		//lock_release(&file_lock);
 		return sized;
 	}
-
+	lock_acquire(&file_lock);
 	write_file = thread_get_file_by_id(fd);
 	//printf("bool: %d\n",write_file->deny_write);
 	if (write_file != NULL)
 	{
+			//	printf("in\n");
 		offset = file_write(write_file,buffer,sized);
 			  // printf("passed\n");
 	}

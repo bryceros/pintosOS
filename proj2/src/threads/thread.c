@@ -193,7 +193,7 @@ thread_create (const char *name, const char *file_name, int priority,
   kf->aux = aux;
   
   t->parent = thread_current();
-    list_push_back (&t->parent->child_list, &t->child_elem);
+    if(t->parent != NULL)list_push_back (&t->parent->child_list, &t->child_elem);
 
 
   /* Stack frame for switch_entry(). */
@@ -205,12 +205,8 @@ thread_create (const char *name, const char *file_name, int priority,
   sf->eip = switch_entry;
   sf->ebp = 0;
 
-  if(file_name !=NULL)
-    {
-      if(thread_set_process_file(t,filesys_open (file_name)) == false)
-      {
-      }
-    }
+  if(file_name !=NULL) thread_set_process_file(t,filesys_open (file_name));
+    
   /* Add to run queue. */
   thread_unblock (t);
   return tid;
@@ -487,6 +483,8 @@ init_thread (struct thread *t, const char *name, int priority)
   t->exit_status = -1;
 
   sema_init(&t->sema,0);
+  sema_init(&t->born_sema,0);
+
   list_init(&t->child_list);
   list_init(&t->grave_list);
   list_init (&t->file_list);
@@ -673,12 +671,13 @@ thread_get_child(tid_t tid)
 }
 void 
 thread_add_to_parent_grave()
-{
+{   if(thread_current()->parent != NULL){
     struct grave* add_grave = malloc(sizeof(struct grave));
     add_grave->exit_status = thread_current()->exit_status;
     add_grave->waited_before = false;
     add_grave->child_tid = thread_current()->tid;
     list_push_back (&thread_current()->parent->grave_list, &add_grave->grave_elem);
+  }
 }
 struct grave* 
 thread_get_grave(tid_t tid)
