@@ -18,6 +18,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "vm/page.h"
+#include "vm/frame.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -87,11 +88,11 @@ start_process (void *file_name_)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
 
-  if(firstime)
-  {
+ // if(firstime)
+ // {
       hash_init(&thread_current()->spt_hash, page_hash, page_comp_less, NULL);
-      firstime = false;
-  }
+     // firstime = false;
+ // }
 
   success = load (file_name, &if_.eip, &if_.esp);
   thread_current()->file_success = success;
@@ -450,60 +451,30 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   ASSERT (ofs % PGSIZE == 0);
 
   file_seek (file, ofs);
-  while (read_bytes > 0 || zero_bytes > 0) 
+  
+       while (read_bytes > 0 || zero_bytes > 0) 
     {
-      /* Calculate how to fill this page.
+      /* Do calculate how to fill this page.
          We will read PAGE_READ_BYTES bytes from FILE
          and zero the final PAGE_ZERO_BYTES bytes. */
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
-          /*if(page_read_bytes == PGSIZE)
-          {
-            printf("ASSERT page_read_bytes == PGSIZE\n");
-            page_create_file(file,ofs, upage, read_bytes, zero_bytes, writable, PAL_USER);
-          }
-          else if(page_zero_bytes == PGSIZE)
-          {
-            printf("ASSERT page_zero_bytes == PGSIZE\n");
+      //++
+    //printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> starting with upage: %p\n",upage);
+    //printf("////////////////////////////////////////////load_segment upage: %p\n",upage);
+    //printf("////////////////////////////////////////////load_segment pg_round_down: %p\n",pg_round_down(upage) );
 
-            struct page_entry* page = page_create_file(file,ofs, upage, read_bytes, zero_bytes, writable, PAL_USER | PAL_ZERO);
+      if(page_load_file(file, ofs, upage,page_read_bytes, page_zero_bytes, writable) == false) return false;
 
-          }
-          else
-          {
-           printf("ASSERT else\n");
+      //printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> 5\n");
 
-            struct page_entry* page = page_create_file(file,ofs, upage, read_bytes, zero_bytes, writable, PAL_USER);
-            page_load_file(page);
-          }*/
-      /* Get a page of memory. */
 
-      uint8_t *kpage = palloc_get_page (PAL_USER);
-      if (kpage == NULL)
-        return false;
-
-      /* Load this page. */ 
-      if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
-        {
-          palloc_free_page (kpage);
-          return false; 
-        }
-      memset (kpage + page_read_bytes, 0, page_zero_bytes);
-
-      /* Add the page to the process's address space. */
-      if (!install_page (upage, kpage, writable)) 
-        {
-          palloc_free_page (kpage);
-          return false; 
-        }
 
       /* Advance. */
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
       upage += PGSIZE;
-      ofs += page_read_bytes;
-
     }
   return true;
 }
@@ -521,7 +492,7 @@ setup_stack (void **esp, char **argv, int argc)
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success){
-        *esp = PHYS_BASE;
+        *esp = PHYS_BASE -12;
 
         uint32_t * reff[argc];
         int byte = 4;

@@ -17,7 +17,7 @@ frame_get_page(struct page_entry* page)
 
 	if ((page->frame_flag & PAL_USER) != 0)
 	{
-	//printf("??????????????????? 1\n");
+	//printf("??????????????????? in frame_get_page\n");
 
 		void* frame = (void*)palloc_get_page(page->frame_flag);
 
@@ -26,15 +26,20 @@ frame_get_page(struct page_entry* page)
 			//printf("???????????????????frame_evict\n");
 			frame_evict();
 			frame = (void*)palloc_get_page(page->frame_flag);
+			if(frame == NULL)
+			{
+				//printf("???????????????????frame_evict failed\n");
+			}
 		}
 		if(install_page (page->user_vaddr, frame, page->accessed))
 		{
-			//printf("??????????????????? 2\n");
+			//printf("??????????????????? frame_get_page succus\n");
 
 			return frame_create(frame,page);
 		}
+
 	}
-	//printf("??????????????????? 3\n");
+	//printf("??????????????????? frame_get_page failed\n");
 
 	return NULL;
 }
@@ -60,9 +65,12 @@ void
 frame_remove (struct frame_entry* frameptr)
 {
 	lock_acquire(&frametable_lock);
-	pagedir_clear_page(frameptr->aux->user_vaddr);
+	palloc_free_page(frameptr->frame);
 	list_remove (&frameptr->elem);
+	pagedir_clear_page(thread_current()->pagedir, frameptr->aux->user_vaddr);
+
 	free(frameptr);
+
 	lock_release(&frametable_lock);
 }
 
@@ -70,6 +78,7 @@ void frame_evict(void)
 {
 	lock_acquire(&frametable_lock);
 	struct frame_entry* frameptr = list_entry(list_max (&frametable, frame_comp_less_time , NULL), struct frame_entry, elem);
+	while(frameptr->aux->loaded) frameptr = list_entry(list_max (&frametable, frame_comp_less_time , NULL), struct frame_entry, elem);
 	lock_release(&frametable_lock);
 
 	struct page_entry* page = frameptr->aux;
@@ -80,18 +89,21 @@ void frame_evict(void)
 
 	frame_remove (frameptr);
 }
-void frame_reclaim(struct page_entry *page)
+bool frame_reclaim(struct page_entry *page)
 {
 	page->flag = PAGE_FILE;
 	struct frame_entry* frameptr = frame_get_page(page);
+	if(frameptr == NULL) return false;
 	swap_read (frameptr->aux->swap_entry, frameptr->frame);
+	page->loaded = false;
+	return true;
 }
 
 
 bool 
 frame_comp_less_time(const struct list_elem *a,const struct list_elem *b, void *aux UNUSED)
 {
-  if(list_entry(a, struct frame_entry, elem)->aux->access_time < list_entry(b, struct frame_entry, elem)->aux->access_time) return true;
+   if(list_entry(a, struct frame_entry, elem)->aux->access_time < list_entry(b, struct frame_entry, elem)->aux->access_time) return true;
   else return false;
 }
 

@@ -12,7 +12,6 @@
 #define USER_VADDR_BOTTOM ((void *) 0x08048000)
 static void syscall_handler (struct intr_frame *);
 static void is_valid_pointer (const void* pointer);
-struct lock file_lock;
 
 void
 syscall_init (void) 
@@ -118,6 +117,7 @@ read(int fd, void* buffer, unsigned sized)
 		offset = file_read(read_file,buffer,sized);
 	}
 	lock_release(&file_lock);
+
 	return offset;
 }
 int 
@@ -256,18 +256,20 @@ syscall_handler (struct intr_frame *f UNUSED)
 		int fd = *((int*)f->esp + 1);  	  	
 		f->eax = filesize(fd);
 		break;
-	}case SYS_READ:{ 
+	}case SYS_READ:{
 		is_valid_pointer((int*)f->esp + 1);
-		is_valid_pointer((int*)f->esp + 2);
-		is_valid_pointer((int*)f->esp + 3);
 
+		is_valid_pointer((int*)f->esp + 2);
+
+
+
+		is_valid_pointer((int*)f->esp + 3);
 		int fd = *((int*)f->esp + 1);
         void* buffer = (void*)(*((int*)f->esp+2));
         is_valid_pointer(buffer);
 
         unsigned size = *((unsigned*)f->esp + 3);
         f->eax = read(fd, buffer, size);
-
 		break;
 	}case SYS_WRITE:{
 		is_valid_pointer((int*)f->esp + 1);
@@ -301,6 +303,8 @@ syscall_handler (struct intr_frame *f UNUSED)
 		int fd = *((int*)f->esp + 1);
 		close(fd);
 		break;
+	}case SYS_MMAP:{
+		exit(-1);
 	}
   }
 }

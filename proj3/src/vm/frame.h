@@ -33,7 +33,7 @@ void frame_insert (struct frame_entry* );
 void frame_remove (struct frame_entry* );
 
 void frame_evict(void);
-void frame_reclaim(struct page_entry *page);
+bool frame_reclaim(struct page_entry *page);
 
 bool frame_comp_less_time(const struct list_elem *a,const struct list_elem *b, void *aux);
 

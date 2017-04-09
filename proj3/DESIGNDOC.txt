@@ -1,0 +1,262 @@
+       	       	    +---------------------------+
+		    |		CS 140		|
+		    | PROJECT 3: VIRTUAL MEMORY	|
+		    |	   DESIGN DOCUMENT	|
+		    +---------------------------+
+
+---- GROUP ----
+
+>> Fill in the names and email addresses of your group members.
+
+bryce roski amendola <bryceros@usc.com>
+FirstName LastName <email@domain.example>
+FirstName LastName <email@domain.example>
+
+---- PRELIMINARIES ----
+
+>> If you have any preliminary comments on your submission, notes for the
+>> TAs, or extra credit, please give them here.
+
+>> Please cite any offline or online sources you consulted while
+>> preparing your submission, other than the Pintos documentation, course
+>> text, lecture notes, and course staff.
+
+			PAGE TABLE MANAGEMENT
+			=====================
+
+---- DATA STRUCTURES ----
+
+>> A1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+IN THREADS 
+struct hash spt_hash;      // this is where all the page tables can be stored and allowed easy access to them.
+
+IN PAGE
+struct lock pagetable_lock;
+
+enum page_flags ///these are enums help determine how we are dealing with a page fault
+  {
+    PAGE_FILE = 002,                   
+    PAGE_SWAP = 003,           
+    PAGE_MMAP = 004           
+  };
+
+struct page_entry {
+    uint32_t* user_vaddr; // this is the upage 
+
+	uint64_t access_time;
+
+	bool loaded; // flag to see in currently used
+	bool accessed; // flag to see if file is writable
+
+	struct hash_elem elem; // so page can be put in page table
+
+	enum page_flags flag; // these are enums help determine how we are dealing with a page fault
+
+	struct file* doc; // file needed in load segment 
+
+	uint32_t read_bytes; // read_bytes needed in load segment
+
+	uint32_t zero_bytes; // zero_bytes needed in load segment
+
+	off_t offset; // ofs needed in load segment
+
+	enum palloc_flags frame_flag; // needed to tell the frame what kind of palloc is needed
+};
+
+IN FRAME
+
+struct list frametable; // the way the frametable implemented to keep track of all frames
+
+struct lock frametable_lock; // the way we can sync thread who want to have access to the frametable
+
+struct frame_entry {
+    uint32_t* frame; // this is the kpage allocated by palloc_get_page
+
+	struct thread* owner; // this is the owner of the frame to have access to 
+
+    struct page_entry* aux; // this is the page_entry which has the connecting user address to kernal address
+
+    struct list_elem elem;  // this is what allows the frametable to stores its frame
+}
+IN SWAP
+
+static struct block* global_swap_block; // this allows us to write and read from the disk
+struct lock swap_lock; // allows for syncing mutiple threads
+struct bitmap *swap_bitmap; // allows a way for us to tell if there a free page or not
+
+
+---- ALGORITHMS ----
+
+>> A2: In a few paragraphs, describe your code for locating the frame,
+>> if any, that contains the data of a given page.
+
+in frame_get_page(struct page_entry* page) it will allocation a physical create a 
+frame_entry link the physical to the virtual address then return the frame 
+
+>> A3: How does your code coordinate accessed and dirty bits between
+>> kernel and user virtual addresses that alias a single frame, or
+>> alternatively how do you avoid the issue?
+
+In Syscall all incoming pointer check to be valid user addresses. 
+the page_entry and frame_entry allow for it to easily link between user, virtual memory, physical memory
+
+
+---- SYNCHRONIZATION ----
+
+>> A4: When two user processes both need a new frame at the same time,
+>> how are races avoided?
+
+
+by making a frametable lock no two process can access any frame function at the same time 
+
+
+---- RATIONALE ----
+
+>> A5: Why did you choose the data structure(s) that you did for
+>> representing virtual-to-physical mappings?
+
+It is the only one I know / pintos guide
+
+		       PAGING TO AND FROM DISK
+		       =======================
+
+---- DATA STRUCTURES ----
+
+>> B1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+struct page_entry {
+	size_t swap_entry; // index needed to reclaim from swaptable 
+};
+
+---- ALGORITHMS ----
+
+>> B2: When a frame is required but none is free, some frame must be
+>> evicted.  Describe your code for choosing a frame to evict.
+
+goes through the frame table selects the frame that has a page not been used the longest. goes load the data into blocks.
+then give the page entry the index to the blocks and deallocate and removes it from the frame table.
+
+>> B3: When a process P obtains a frame that was previously used by a
+>> process Q, how do you adjust the page table (and any other data
+>> structures) to reflect the frame Q no longer has?
+
+once a frame is no longer owned the frame_entry is deleted and removed from frame table.
+the frame P has is a newly allocated frame with possibly a new physical address.
+
+
+>> B4: Explain your heuristic for deciding whether a page fault for an
+>> invalid virtual address should cause the stack to be extended into
+>> the page that faulted.
+
+else if( fault_addr >= esp -32) // this line in page_check
+
+reason why is because the memory address is close enough.
+
+---- SYNCHRONIZATION ----
+
+>> B5: Explain the basics of your VM synchronization design.  In
+>> particular, explain how it prevents deadlock.  (Refer to the
+>> textbook for an explanation of the necessary conditions for
+>> deadlock.)
+
+I have a swap lock and frame lock to kept them sync both preventing deadlocks.
+
+>> B6: A page fault in process P can cause another process Q's frame
+>> to be evicted.  How do you ensure that Q cannot access or modify
+>> the page during the eviction process?  How do you avoid a race
+>> between P evicting Q's frame and Q faulting the page back in?
+
+loaded varible in page_entry pervents any page from being evicted when used.
+
+>> B7: Suppose a page fault in process P causes a page to be read from
+>> the file system or swap.  How do you ensure that a second process Q
+>> cannot interfere by e.g. attempting to evict the frame while it is
+>> still being read in?
+
+loaded varible in page_entry pervents any page from being evicted when used.
+
+>> B8: Explain how you handle access to paged-out pages that occur
+>> during system calls.  Do you use page faults to bring in pages (as
+>> in user programs), or do you have a mechanism for "locking" frames
+>> into physical memory, or do you use some other design?  How do you
+>> gracefully handle attempted accesses to invalid virtual addresses?
+
+it a invalid user address calls pagefault one of two things happen
+
+1. if close to the stack pointer allocate a page for it
+2. calls exit -1
+
+---- RATIONALE ----
+
+>> B9: A single lock for the whole VM system would make
+>> synchronization easy, but limit parallelism.  On the other hand,
+>> using many locks complicates synchronization and raises the
+>> possibility for deadlock but allows for high parallelism.  Explain
+>> where your design falls along this continuum and why you chose to
+>> design it this way.
+
+mine more on the simple side of using lock it's because speed of implementing
+
+			 MEMORY MAPPED FILES
+			 ===================
+
+---- DATA STRUCTURES ----
+
+>> C1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+NONE
+
+---- ALGORITHMS ----
+
+>> C2: Describe how memory mapped files integrate into your virtual
+>> memory subsystem.  Explain how the page fault and eviction
+>> processes differ between swap pages and other pages.
+
+ memory mapped files if implemented would be close enum SWAP or enum FILE pages but need to be cleaned up 
+and thrown away at the end of the process
+
+>> C3: Explain how you determine whether a new file mapping overlaps
+>> any existing segment.
+
+if implement page_entry share the same entry they would be combined
+
+---- RATIONALE ----
+
+>> C4: Mappings created with "mmap" have similar semantics to those of
+>> data demand-paged from executables, except that "mmap" mappings are
+>> written back to their original files, not to swap.  This implies
+>> that much of their implementation can be shared.  Explain why your
+>> implementation either does or does not share much of the code for
+>> the two situations.
+
+not Implemented mmap read file would be the same as a normal page
+
+			   SURVEY QUESTIONS
+			   ================
+
+Answering these questions is optional, but it will help us improve the
+course in future quarters.  Feel free to tell us anything you
+want--these questions are just to spur your thoughts.  You may also
+choose to respond anonymously in the course evaluations at the end of
+the quarter.
+
+>> In your opinion, was this assignment, or any one of the three problems
+>> in it, too easy or too hard?  Did it take too long or too little time?
+
+>> Did you find that working on a particular part of the assignment gave
+>> you greater insight into some aspect of OS design?
+
+>> Is there some particular fact or hint we should give students in
+>> future quarters to help them solve the problems?  Conversely, did you
+>> find any of our guidance to be misleading?
+
+>> Do you have any suggestions for the TAs to more effectively assist
+>> students, either for future quarters or the remaining projects?
+
+>> Any other comments?

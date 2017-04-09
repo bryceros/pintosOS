@@ -155,22 +155,27 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
-    //printf("////////////////////////////////////////////page_fault\n");
-    //printf("////////////////////////////////////////////fault_addr: %p\n",fault_addr);
-  if(fault_addr != NULL && is_user_vaddr(fault_addr))
+
+    bool success = false;
+
+  if(is_user_vaddr(fault_addr) && (unsigned) fault_addr >= (unsigned) 0x08048000)
   {
-    //printf("////////////////////////////////////////////in here: %p\n",fault_addr);
-    if(page_check(fault_addr,f->esp)) return;
+    success = page_check(fault_addr,f->esp);
   }
 
+ if(!success)
+  {
+      exit(-1);
+  }
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
      which fault_addr refers. */
-  printf ("Page fault at %p: %s error %s page in %s context.\n",
+  /*printf ("Page fault at %p: %s error %s page in %s context.\n",
           fault_addr,
           not_present ? "not present" : "rights violation",
           write ? "writing" : "reading",
           user ? "user" : "kernel");
-  kill (f);
+  kill (f);*/
+  
 }
 

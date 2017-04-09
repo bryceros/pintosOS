@@ -39,6 +39,7 @@
 #endif
 #ifdef VM
 #include "vm/swap.h"
+#include "vm/frame.h"
 #endif
 
 /* Page directory with kernel mappings only. */
@@ -398,6 +399,7 @@ locate_block_devices (void)
   locate_block_device (BLOCK_SCRATCH, scratch_bdev_name);
 #ifdef VM
   locate_block_device (BLOCK_SWAP, swap_bdev_name);
+  frametable_init();
   swap_init();
 #endif
 }

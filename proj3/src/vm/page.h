@@ -9,6 +9,8 @@
 
 //a list or hashtable of sup_page_table_entry as your supplementary page table
 //remember, each thread should have its own sup_page_table, so create a new
+struct lock pagetable_lock;
+
 enum page_flags
   {
     PAGE_FILE = 002,                   
@@ -26,7 +28,7 @@ Use the timer_ticks () function to get this value!
 */
 	uint64_t access_time;
 // You can use the provided PTE functions instead. I’ve posted links to
-	bool dirty;
+	bool loaded;
 	bool accessed;
 
 	struct hash_elem elem;              /* List element. */
@@ -58,10 +60,12 @@ struct page_entry* page_create_file(struct file*, off_t, uint8_t*, uint32_t, uin
 
 struct page_entry* page_get (void *);
 
-bool page_load_file(struct page_entry* page);
+bool page_load_file(struct file*, off_t, uint8_t*, uint32_t, uint32_t, bool);
 
-bool page_growth_stack(void *);
+bool page_grow_stack(void *);
 
 void page_print(struct page_entry*);
+
+bool page_destroy_table(struct hash *pagetable_hash);
 
 #endif
