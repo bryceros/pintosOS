@@ -1,0 +1,225 @@
+		     +--------------------------+
+       	       	     |		CS 140		|
+		     | PROJECT 2: USER PROGRAMS	|
+		     | 	   DESIGN DOCUMENT     	|
+		     +--------------------------+
+
+---- GROUP ----
+
+>> Fill in the names and email addresses of your group members.
+
+Bryce Roski Amendola <bryceros@usc.edu>
+
+---- PRELIMINARIES ----
+
+>> If you have any preliminary comments on your submission, notes for the
+>> TAs, or extra credit, please give them here.
+
+>> Please cite any offline or online sources you consulted while
+>> preparing your submission, other than the Pintos documentation, course
+>> text, lecture notes, and course staff.
+
+			   ARGUMENT PASSING
+			   ================
+
+
+
+---- DATA STRUCTURES ----
+
+>> A1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+---- ALGORITHMS ----
+
+>> A2: Briefly describe how you implemented argument parsing.  How do
+>> you arrange for the elements of argv[] to be in the right order?
+>> How do you avoid overflowing the stack page?
+ 
+ I arrange the argv[] to be placed backwords in the stack so when pop they would come out in the right order after that I just align the bytes so that it could be useful. I made sure I wasn't importing more than necessarily.
+
+---- RATIONALE ----
+
+>> A3: Why does Pintos implement strtok_r() but not strtok()?
+
+strtok uses a static varible inorder to work and in the man page it's not thread safe.
+
+>> A4: In Pintos, the kernel separates commands into a executable name
+>> and arguments.  In Unix-like systems, the shell does this
+>> separation.  Identify at least two advantages of the Unix approach.
+Pintos is simplier to the extend that almost every thread call process_execute. This issue is not every thread running is a file like process_execute an example is Idle thread with takes a semaphore instead of files and commands.   
+
+			     SYSTEM CALLS
+			     ============
+
+---- DATA STRUCTURES ----
+
+>> B1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+IN thread.h
+  struct grave 					/* this struct is used keep information about child threads that have exited. used by parent thread in process_wait figure out what to return*/
+   {
+     int exit_status;			/* this is the exit status of the child thread */
+     bool waited_before;		/* this is to tell if got the exit of this thread before */
+     tid_t child_tid;			/* this is the id of the child thread */
+     struct list_elem grave_elem; /* this makes it able to be place in grave_list.            
+
+   };
+  struct thread_file			/* this struct is to for multiple threads to keep the same file with their own id */
+  {
+    struct file* this_file;		/* this is the file the thread has open and want to keep */
+    int fd;                     /* this is the unquine id to make it easier for the thread to search for*/
+    struct list_elem file_elem; /* this allow it to be placed in file_list */
+  };
+
+struct thread
+  {
+
+    struct file* process_file;	/* this is the exacutable file this thread is running. It's needed to disable and enable writes  */
+    struct thread* parent;		/* this is thread that created this one. used for child to stay in contact with parent(needed for exec-missing)
+    int exit_status; 			/* this is the data passing from system call exit() to when child is delete in thread_exit*/
+    bool file_success;			/* this is the data that the parent reads to see if child execute file is loaded properly */
+    struct list child_list;		/* this is a list (holds threads) of children threads that are still running, use in all form of comunicating between child and parent*/
+    struct list grave_list;		/* this is a list (holds graves) of children threads that aren't running anymore.
+    struct list_elem child_elem; /* list element needed for child_list */         
+
+    struct semaphore sema; /* sema so the parent will wait until child has exit */
+    struct semaphore born_sema; /* sema so the parent will wait until the child thread has try to load it's exacutable file */
+
+    
+    int count_fd; /*a count to give each file a unquine file id like a database to help with searching open files that this thread owns*/
+    struct list file_list; /* a list of file that this thread owns */           
+  };
+  In syscall.c
+
+  struct lock file_lock; /* need to keep syscalls insync */
+
+
+>> B2: Describe how file descriptors are associated with open files.
+>> Are file descriptors unique within the entire OS or just within a
+>> single process?
+
+	file descriptors are to keep a relationship with threads and files that the threads has open and owns. file descriptors are unique within.  
+
+---- ALGORITHMS ----
+
+>> B3: Describe your code for reading and writing user data from the
+>> kernel.
+
+	once out of the the stack and validated first check if is a stdin (fd=0 for read()) or stdout (fd=1 for write) if so I do a input_getc (read) or putbuf (write). If not I aquire a lock that allows only one to read and write at a time. then get the file corresponding with the unique id (fd). call file_write (write) and file_read (read) and then release the lock. 
+
+>> B4: Suppose a system call causes a full page (4,096 bytes) of data
+>> to be copied from user space into the kernel.  What is the least
+>> and the greatest possible number of inspections of the page table
+>> (e.g. calls to pagedir_get_page()) that might result?  What about
+>> for a system call that only copies 2 bytes of data?  Is there room
+>> for improvement in these numbers, and how much?
+
+There is an inspection per every new page allocated.
+for (4,096 bytes)
+		lowest 1 inspection if that page holds all the bytes
+
+		highest 4,096 inspection if each page holds a byte
+for (2 bytes)
+		lowest 1 inspection if that page holds 2 the bytes
+
+		highest 2 inspection if each page holds a byte
+
+sytemcalls can share the same page making page space less waistfull.
+
+
+>> B5: Briefly describe your implementation of the "wait" system call
+>> and how it interacts with process termination.
+
+the wait system takes in a child thread's id (tid)and call process_wait. In process_wait if the child thread truely is a child of this thread and it's still running this thread will wait until the child is done running.
+
+>> B6: Any access to user program memory at a user-specified address
+>> can fail due to a bad pointer value.  Such accesses must cause the
+>> process to be terminated.  System calls are fraught with such
+>> accesses, e.g. a "write" system call requires reading the system
+>> call number from the user stack, then each of the call's three
+>> arguments, then an arbitrary amount of user memory, and any of
+>> these can fail at any point.  This poses a design and
+>> error-handling problem: how do you best avoid obscuring the primary
+>> function of code in a morass of error-handling?  Furthermore, when
+>> an error is detected, how do you ensure that all temporarily
+>> allocated resources (locks, buffers, etc.) are freed?  In a few
+>> paragraphs, describe the strategy or strategies you adopted for
+>> managing these issues.  Give an example.
+
+	the best apporach I found was catching all bad pointers before they got allocated or used. the main method for error handling I used was is_valid_pointer in syscall.c. is_valid_pointer is if the pointer is null, has a user address, pagedir_get_page, and if pointer address is less than USER_VADDR_BOTTOM. if anyone of these are true then I force the current_thread to call exit(-1) preventing it from making any allocation or uses with these bad pointer. An example is write. staring at the begining of system handler I frist check if the stack pointer is valid is_valid_pointer(f->esp). then in write case I check all three arguments before saving them 		is_valid_pointer((int*)f->esp + 1); ,is_valid_pointer((int*)f->esp + 2);, is_valid_pointer((int*)f->esp + 3). finally I check validate any of these agruments if they are pointers like void* buffer is_valid_pointer(buffer).
+
+---- SYNCHRONIZATION ----
+
+>> B7: The "exec" system call returns -1 if loading the new executable
+>> fails, so it cannot return before the new executable has completed
+>> loading.  How does your code ensure this?  How is the load
+>> success/failure status passed back to the thread that calls "exec"?
+
+In process_execute right after creatiing the child thread (thread_create) the parent sema_down it own thread->born_sema. in process_start after calling load() the child thread save the results in it's thread->exit_status sema_up the parent born_sema and sema down it's own thread->born_sema. the parent wake up gets the child thread->exit_status check if false is will return -1 but still waiting up the child thread either way by sema_up the child's thread->born_sema.
+
+>> B8: Consider parent process P with child process C.  How do you
+>> ensure proper synchronization and avoid race conditions when P
+>> calls wait(C) before C exits?  After C exits?  How do you ensure
+>> that all resources are freed in each case?  How about when P
+>> terminates without waiting, before C exits?  After C exits?  Are
+>> there any special cases?
+
+Part 1 How do you ensure proper synchronization and avoid race conditions when P calls wait(C) before C exits?
+P will wait sema_down C's thread->sema untill C sema it up in thread_exit
+
+Part 2  After C exits?  
+uses a struct grave to save all the importrant information and give it the the parent as a look up
+
+Part 3 How do you ensure that all resources are freed in each case?
+You delete all list and pointer you abtained. for the information still needed after you put in struct grave.
+
+Part 3  How about when P terminates without waiting, before C exits? 
+all the test I remember P alway terminate after C. But shouldn't matter because C don't depend on P once's it's running
+
+Part 4 After C exits?  Are there any special cases?
+Should not be a issue
+
+
+---- RATIONALE ----
+
+>> B9: Why did you choose to implement access to user memory from the
+>> kernel in the way that you did?
+
+I did the first method in Accessing User Memory because it was claimed the simplest 
+
+>> B10: What advantages or disadvantages can you see to your design
+>> for file descriptors?
+advantages: simple allows for multiply thread having different files.
+disadvantages: extra memory and files id (fd) are not transferable between threads
+
+>> B11: The default tid_t to pid_t mapping is the identity mapping.
+>> If you changed it, what advantages are there to your approach?
+
+if you keep them cast to a int they would be make it easier in understanding the connection between them and other int. data mapping
+
+			   SURVEY QUESTIONS
+			   ================
+
+Answering these questions is optional, but it will help us improve the
+course in future quarters.  Feel free to tell us anything you
+want--these questions are just to spur your thoughts.  You may also
+choose to respond anonymously in the course evaluations at the end of
+the quarter.
+
+>> In your opinion, was this assignment, or any one of the three problems
+>> in it, too easy or too hard?  Did it take too long or too little time?
+
+>> Did you find that working on a particular part of the assignment gave
+>> you greater insight into some aspect of OS design?
+
+>> Is there some particular fact or hint we should give students in
+>> future quarters to help them solve the problems?  Conversely, did you
+>> find any of our guidance to be misleading?
+
+>> Do you have any suggestions for the TAs to more effectively assist
+>> students, either for future quarters or the remaining projects?
+
+>> Any other comments?
