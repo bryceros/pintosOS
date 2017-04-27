@@ -25,9 +25,11 @@ struct inode_disk
     block_sector_t indirect[BLOCK_INDIRECT];           /* First data sector. */
     block_sector_t double_indirect[BLOCK_DOUBLE];
     off_t length;
-    off_t EOF;                       /* File size in bytes. */
-    unsigned magic;                     /* Magic number. */
-    uint32_t unused[(512-sizeof(unsigned)-sizeof(off_t)-sizeof(off_t)-BLOCK_DIRECT*sizeof(block_sector_t)-BLOCK_INDIRECT*sizeof(block_sector_t)-BLOCK_DOUBLE*sizeof(block_sector_t))/sizeof(uint32_t)];               /* Not used. */
+    off_t EOF;
+    bool type;
+    block_sector_t parent;                     
+    unsigned magic;                    /* Magic number. */
+    uint32_t unused[(512-sizeof(unsigned)-sizeof(block_sector_t)-sizeof(bool)-sizeof(off_t)-sizeof(off_t)-BLOCK_DIRECT*sizeof(block_sector_t)-BLOCK_INDIRECT*sizeof(block_sector_t)-BLOCK_DOUBLE*sizeof(block_sector_t))/sizeof(uint32_t)];               /* Not used. */
   };
 
 /* Returns the number of sectors to allocate for an inode SIZE
@@ -46,6 +48,7 @@ struct inode
     int open_cnt;                       /* Number of openers. */
     bool removed;                       /* True if deleted, false otherwise. */
     int deny_write_cnt;                 /* 0: writes ok, >0: deny writes. */
+    //enum inode_flags flag;
     struct inode_disk data;             /* Inode content. */
   };
 
@@ -69,6 +72,7 @@ byte_to_sector (const struct inode *inode, off_t pos)
 static block_sector_t
 byte_to_sector (const struct inode *inode, off_t pos) 
 {
+  //printf("BYTE TO SECTOR: length %u pos %u\n", inode->data.length, pos);
   size_t Double_Index = 0;
   size_t Indirect_Index = 0;
   size_t Direct_Index = 0;
@@ -166,7 +170,8 @@ inode_create (block_sector_t sector, off_t length)
 }*/
 
 bool
-inode_create (block_sector_t sector, off_t length)
+//inode_create (block_sector_t sector, off_t length, enum inode_flags type)
+inode_create (block_sector_t sector, off_t length,bool type)
 {
   struct inode_disk *disk_inode = NULL;
   bool success = false;
@@ -183,6 +188,8 @@ inode_create (block_sector_t sector, off_t length)
       disk_inode->length = length;
       disk_inode->EOF = 0;
       disk_inode->magic = INODE_MAGIC;
+      disk_inode->type = type;
+      disk_inode->parent = ROOT_DIR_SECTOR;
       if (inode_expand (disk_inode, length)) 
         {
           block_write (fs_device, sector, disk_inode);
@@ -224,6 +231,8 @@ inode_expand(struct inode_disk* node, off_t length)
 
   size_t sectors = bytes_to_sectors (length) - bytes_to_sectors (node->EOF);
   static char zeros[BLOCK_NUMBER];
+    //printf("sectors: %d\n", sectors);
+
   while(sectors > 0)
   {
     sectors_to_index(cur_sectors,&Double_Index,&Indirect_Index,&Direct_Index);
@@ -446,6 +455,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 {
   const uint8_t *buffer = buffer_;
   off_t bytes_written = 0;
+  //printf("BEFORE WRITE: %u\n", inode_length(inode));
   uint8_t *bounce = NULL;
   if (inode->deny_write_cnt)
     return 0;
@@ -462,6 +472,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
     {
       /* Sector to write, starting byte offset within sector. */
       block_sector_t sector_idx = byte_to_sector (inode, offset);
+      //printf("INODE_WRITE_AT: bytes_to_sector returned: %u\n", sector_idx);
       int sector_ofs = offset % BLOCK_SECTOR_SIZE;
 
       /* Bytes left in inode, bytes left in sector, lesser of the two. */
@@ -507,7 +518,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
     }
   free (bounce);
 
-
+  //printf("AFTER WRITE: %u\n", inode_length(inode));
   return bytes_written;
 }
 /*off_t
@@ -578,4 +589,21 @@ off_t
 inode_length (const struct inode *inode)
 {
   return inode->data.length;
+}
+void
+inode_set_parent(struct inode * child,struct inode * parent)
+{
+   child->data.parent = parent->sector;
+}
+
+struct inode *
+inode_get_parent(struct inode * inode)
+{
+  return inode_open(inode->data.parent);
+}
+
+bool 
+inode_get_type(struct inode *inode)
+{
+  return inode->data.type;
 }

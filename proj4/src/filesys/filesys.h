@@ -13,8 +13,12 @@ struct block *fs_device;
 
 void filesys_init (bool format);
 void filesys_done (void);
-bool filesys_create (const char *name, off_t initial_size);
+//bool filesys_create (const char*, off_t, enum inode_flags) ;
+bool filesys_create (const char *name, off_t initial_size, bool type);
+
 struct file *filesys_open (const char *name);
 bool filesys_remove (const char *name);
+
+char* filesys_get_filename(const char*);
 
 #endif /* filesys/filesys.h */

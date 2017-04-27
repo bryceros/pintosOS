@@ -6,6 +6,9 @@
 #include <stdint.h>
 #include "synch.h"
 #include "filesys/file.h"
+#include "devices/block.h"
+#include "filesys/directory.h"
+
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -126,6 +129,9 @@ struct thread
     /*list of all files this thread owns*/
     int count_fd;
     struct list file_list;                  /* Project 2.2*/
+
+    struct dir* curr_dir;                     
+
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */

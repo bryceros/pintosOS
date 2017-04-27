@@ -33,5 +33,15 @@ unsigned tell(int fd);
 
 void close(int fd);
 
+bool mkdir (const char *dir);
+
+bool readdir (int fd, char *name);
+
+bool isdir (int fd);
+
+int inumber (int fd);
+
+
+
 
 #endif /* userprog/syscall.h */

@@ -8,6 +8,9 @@
 #include "threads/vaddr.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
+#include "filesys/inode.h"
+#include "filesys/directory.h"
+
 
 #define USER_VADDR_BOTTOM ((void *) 0x08048000)
 static void syscall_handler (struct intr_frame *);
@@ -58,7 +61,7 @@ create(const char* file, unsigned initial_size)
 {
 	bool success = false;
 	lock_acquire(&file_lock);
-  	success = filesys_create(file, initial_size);
+  	success = filesys_create(file, initial_size,false);
 	lock_release(&file_lock);
   	return success;
 }
@@ -124,7 +127,7 @@ int
 write(int fd, const void* buffer, unsigned sized)
 {
 	//printf("file_id: %d\n",fd);
-	int offset = 0;
+	int offset = -1;
 	struct file* write_file;
 
 	if(fd == 1){
@@ -136,7 +139,7 @@ write(int fd, const void* buffer, unsigned sized)
 	lock_acquire(&file_lock);
 	write_file = thread_get_file_by_id(fd);
 	//printf("bool: %d\n",write_file->deny_write);
-	if (write_file != NULL)
+	if (write_file != NULL && inode_get_type(write_file->inode) == false)
 	{
 			//	printf("in\n");
 		offset = file_write(write_file,buffer,sized);
@@ -185,7 +188,48 @@ close(int fd)
 	if (success == false) exit(-1);
 
 }
+bool 
+chdir (const char *dir)
+{
+	struct dir* new_dir = dir_getdir(dir);
+	char *filename = filesys_get_filename(dir);
+	struct inode* node;
+	if (new_dir != NULL && dir_lookup(new_dir,filename,&node))
+	{
+		thread_current()->curr_dir = dir_open(node);
+		return true;
+	}
+	dir_close(new_dir);
+	return false;
+}
+bool 
+mkdir (const char *dir)
+{
+	return filesys_create (dir, 0, true);
+}
+bool 
+readdir (int fd, char *name)
+{
+	if(isdir(fd))
+	{	
+		struct file* readdir = thread_get_file_by_id(fd);
+		return dir_readdir(dir_open(file_get_inode(readdir)),name);
+	}
 
+	return false;
+}
+bool 
+isdir (int fd)
+{
+	struct file* isdir = thread_get_file_by_id(fd);
+	return inode_get_type(file_get_inode(isdir));
+}
+int 
+inumber (int fd)
+{
+	struct file* inumber_file = thread_get_file_by_id(fd);
+		return inode_get_inumber(file_get_inode(inumber_file));
+}
 
 static void
 syscall_handler (struct intr_frame *f UNUSED) 
@@ -300,6 +344,47 @@ syscall_handler (struct intr_frame *f UNUSED)
 
 		int fd = *((int*)f->esp + 1);
 		close(fd);
+		break;
+	}case SYS_CHDIR:{
+		is_valid_pointer((int*)f->esp + 1);
+
+		const char* file = (const char*)(*((int*)f->esp+1));
+		is_valid_pointer(file);
+
+		f->eax = chdir(file);
+		break;
+	}case SYS_MKDIR:{
+		is_valid_pointer((int*)f->esp + 1);
+
+		const char* file = (const char*)(*((int*)f->esp+1));
+		is_valid_pointer(file);
+
+		f->eax = mkdir(file);
+		break;
+	}case SYS_READDIR:{
+		is_valid_pointer((int*)f->esp + 1);
+		is_valid_pointer((int*)f->esp + 2);
+
+
+		int fd = *((int*)f->esp + 1);
+		const char* file = (const char*)(*((int*)f->esp+2));
+		is_valid_pointer(file);
+
+		f->eax = readdir(fd,file);
+		break;
+	}case SYS_ISDIR:{
+		is_valid_pointer((int*)f->esp + 1);
+
+		int fd = *((int*)f->esp + 1);
+
+		f->eax = isdir(fd);
+		break;
+	}case SYS_INUMBER:{
+		is_valid_pointer((int*)f->esp + 1);
+
+		int fd = *((int*)f->esp + 1);
+		
+		f->eax = inumber(fd);
 		break;
 	}
   }

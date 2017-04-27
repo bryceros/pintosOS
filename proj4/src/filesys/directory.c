@@ -5,6 +5,9 @@
 #include "filesys/filesys.h"
 #include "filesys/inode.h"
 #include "threads/malloc.h"
+#include "threads/thread.h"
+
+#define ASCII_SLASH 47
 
 /* A directory. */
 struct dir 
@@ -26,7 +29,7 @@ struct dir_entry
 bool
 dir_create (block_sector_t sector, size_t entry_cnt)
 {
-  return inode_create (sector, entry_cnt * sizeof (struct dir_entry));
+  return inode_create (sector, entry_cnt * sizeof (struct dir_entry),true);
 }
 
 /* Opens and returns the directory for the given INODE, of which
@@ -174,6 +177,9 @@ dir_add (struct dir *dir, const char *name, block_sector_t inode_sector)
   e.inode_sector = inode_sector;
   success = inode_write_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
 
+  inode_set_parent(inode_open(inode_sector),dir->inode);
+
+
  done:
   return success;
 }
@@ -234,3 +240,72 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
     }
   return false;
 }
+struct dir*
+dir_getdir(char *dir_path)
+{
+  char file_name[strlen(dir_path) + 1];
+  memcpy(file_name, dir_path, strlen(dir_path) + 1);
+  char* token;
+  char* save_ptr;
+  struct dir* current = NULL;
+//printf("0.0: \n");
+
+      if (file_name[0] == '/' || thread_current()->curr_dir == NULL)
+      {
+//printf("1.0: \n");
+
+        current = dir_open_root();
+      }
+      else
+      {
+//printf("1.1:\n");
+        current = dir_reopen(thread_current()->curr_dir);
+      }
+//printf("file_name: %s\n",file_name);
+
+      for (token = strtok_r (file_name, "/", &save_ptr); token != NULL; token = strtok_r (NULL, "/", &save_ptr))
+      {
+//printf("token: %s\n",token);
+        if(strcmp(token,".") == 0)
+          continue;
+        else if(strcmp(token,"..") == 0)
+        {
+           struct inode* node = current;
+          current = dir_open(inode_get_parent(current->inode));
+          dir_close(node);
+        }
+        else 
+        {
+          struct inode* node;
+//printf("dir_lookup begin:\n");          
+          if(dir_lookup(current,token,&node))
+          {
+//printf("dir_lookup success:\n");          
+            if (inode_get_type(node))
+            {
+//printf("this is a dir:\n");          
+
+              dir_close(current);
+              current = dir_open(node);
+            }
+            else
+              return current;
+          }
+          else if((token = strtok_r (NULL, "/", &save_ptr)) == NULL)
+          {
+//printf("last words\n");
+            return current;
+          }    
+          else
+              return NULL;
+        }
+
+      }
+//printf("get too end\n");
+      struct inode* node = current;
+      current = dir_open(inode_get_parent(current->inode));
+      dir_close(node);
+      return  current;
+
+}
+
