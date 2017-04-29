@@ -189,6 +189,7 @@ inode_create (block_sector_t sector, off_t length,bool type)
       disk_inode->EOF = 0;
       disk_inode->magic = INODE_MAGIC;
       disk_inode->type = type;
+
       disk_inode->parent = ROOT_DIR_SECTOR;
       if (inode_expand (disk_inode, length)) 
         {
@@ -606,4 +607,10 @@ bool
 inode_get_type(struct inode *inode)
 {
   return inode->data.type;
+}
+
+int 
+inode_get_cnt(struct inode *inode)
+{
+  return inode->open_cnt;
 }

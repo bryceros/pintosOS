@@ -139,7 +139,7 @@ write(int fd, const void* buffer, unsigned sized)
 	lock_acquire(&file_lock);
 	write_file = thread_get_file_by_id(fd);
 	//printf("bool: %d\n",write_file->deny_write);
-	if (write_file != NULL && inode_get_type(write_file->inode) == false)
+	if (write_file != NULL && inode_get_type(file_get_inode(write_file)) == false)
 	{
 			//	printf("in\n");
 		offset = file_write(write_file,buffer,sized);
@@ -191,17 +191,25 @@ close(int fd)
 bool 
 chdir (const char *dir)
 {
-	struct dir* new_dir = dir_getdir(dir);
+  bool full;
+	struct dir* new_dir = dir_getdir(dir,&full);
+	//printf("1\n");
+	dir_swap_parent(&new_dir);
+	//printf("4\n");
 	char *filename = filesys_get_filename(dir);
 	struct inode* node;
 	if (new_dir != NULL && dir_lookup(new_dir,filename,&node))
 	{
+		//printf("5\n");
 		thread_current()->curr_dir = dir_open(node);
+		dir_close(new_dir);
 		return true;
 	}
+	//printf("6\n");
 	dir_close(new_dir);
 	return false;
 }
+
 bool 
 mkdir (const char *dir)
 {

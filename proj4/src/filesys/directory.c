@@ -7,8 +7,6 @@
 #include "threads/malloc.h"
 #include "threads/thread.h"
 
-#define ASCII_SLASH 47
-
 /* A directory. */
 struct dir 
   {
@@ -207,6 +205,12 @@ dir_remove (struct dir *dir, const char *name)
   if (inode == NULL)
     goto done;
 
+
+  //printf("inode_get_cnt(dir_get_inode(dir))%d\n", inode_get_cnt(dir_get_inode(dir)));
+
+  if (inode_get_inumber(inode) == FREE_MAP_SECTOR || inode_get_inumber(inode) == ROOT_DIR_SECTOR || inode_get_cnt(inode) > 3 || dir_check_ansester(thread_current()->curr_dir, inode))//(thread_current()->curr_dir != NULL && inode_get_inumber(inode) == inode_get_inumber(dir_get_inode(thread_current()->curr_dir))))
+          goto done;
+
   /* Erase directory entry. */
   e.in_use = false;
   if (inode_write_at (dir->inode, &e, sizeof e, ofs) != sizeof e) 
@@ -240,60 +244,52 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
     }
   return false;
 }
+
 struct dir*
-dir_getdir(char *dir_path)
+dir_getdir(const char *dir_path,bool* full)
 {
+  (*full) = false;
   char file_name[strlen(dir_path) + 1];
   memcpy(file_name, dir_path, strlen(dir_path) + 1);
   char* token;
   char* save_ptr;
   struct dir* current = NULL;
 //printf("0.0: \n");
-
       if (file_name[0] == '/' || thread_current()->curr_dir == NULL)
       {
-//printf("1.0: \n");
-
         current = dir_open_root();
+        //printf("1111111111.0: \n");
       }
       else
       {
-//printf("1.1:\n");
         current = dir_reopen(thread_current()->curr_dir);
+        //printf("222222222.0: \n");
+
       }
 //printf("file_name: %s\n",file_name);
-
       for (token = strtok_r (file_name, "/", &save_ptr); token != NULL; token = strtok_r (NULL, "/", &save_ptr))
       {
 //printf("token: %s\n",token);
+
         if(strcmp(token,".") == 0)
           continue;
         else if(strcmp(token,"..") == 0)
         {
-           struct inode* node = current;
-          current = dir_open(inode_get_parent(current->inode));
-          dir_close(node);
+          dir_swap_parent(&current);
         }
         else 
         {
           struct inode* node;
-//printf("dir_lookup begin:\n");          
-          if(dir_lookup(current,token,&node))
+          if( dir_lookup(current,token,&node))
           {
-//printf("dir_lookup success:\n");          
-            if (inode_get_type(node))
-            {
-//printf("this is a dir:\n");          
-
+//printf("dir_lookup success:\n"); 
               dir_close(current);
               current = dir_open(node);
-            }
-            else
-              return current;
           }
           else if((token = strtok_r (NULL, "/", &save_ptr)) == NULL)
           {
-//printf("last words\n");
+//printf("in file\n");
+            (*full) = false;
             return current;
           }    
           else
@@ -302,10 +298,29 @@ dir_getdir(char *dir_path)
 
       }
 //printf("get too end\n");
-      struct inode* node = current;
-      current = dir_open(inode_get_parent(current->inode));
-      dir_close(node);
+       (*full) = true;
       return  current;
+}
 
+void dir_swap_parent(struct dir** current)
+{
+  if((*current) != NULL)
+  {
+    struct inode* inode = (*current)->inode;
+    (*current) = dir_open(inode_get_parent(inode));
+    inode_close(inode);
+  }
+}
+
+bool dir_check_ansester(struct dir* child, struct inode* parent)
+{
+  while(child != NULL && inode_get_inumber(child->inode) != FREE_MAP_SECTOR && inode_get_inumber(child->inode) != ROOT_DIR_SECTOR)
+  {
+    if (inode_get_inumber(child->inode) != inode_get_inumber(parent))
+      dir_swap_parent(&child);
+    else
+      return true;
+  }
+  return false;
 }
 

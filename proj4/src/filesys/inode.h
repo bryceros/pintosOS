@@ -24,5 +24,6 @@ off_t inode_length (const struct inode *);
 void inode_set_parent(struct inode *,struct inode *);
 struct inode* inode_get_parent(struct inode *);
 bool inode_get_type(struct inode *);
+int inode_get_cnt(struct inode *);
 
 #endif /* filesys/inode.h */

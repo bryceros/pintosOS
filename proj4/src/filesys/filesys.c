@@ -50,14 +50,16 @@ bool
 filesys_create (const char *name, off_t initial_size, bool type)
 
 {
+
   block_sector_t inode_sector = 0;
   //struct dir *dir = dir_open_root ();
-  struct dir *dir = dir_getdir(name);
+  bool full;
+  struct dir *dir = dir_getdir(name,&full);
+  if (full == true && dir != dir_open_root())
+    return false;
+//printf("0/ %d\n",inode_get_cnt(dir_get_inode(dir)));
   char *filename = filesys_get_filename(name);
-  if (dir == NULL)
-{
-  printf("dir is null\n");
-}
+
   bool success = (dir != NULL
                   && free_map_allocate (1, &inode_sector)
                   && inode_create (inode_sector, initial_size,type)
@@ -65,7 +67,11 @@ filesys_create (const char *name, off_t initial_size, bool type)
   if (!success && inode_sector != 0)
     free_map_release (inode_sector, 1);
 
-//dir_close (dir);
+//printf("1/ %d\n",inode_get_cnt(dir_get_inode(dir)));
+
+//printf("filesys_create %d\n",inode_get_inumber(dir_get_inode(dir)));
+
+dir_close (dir);
 free(filename);
   return success;
 }
@@ -79,19 +85,39 @@ struct file *
 filesys_open (const char *name)
 {
   //struct dir *dir = dir_open_root ();
-  struct dir *dir = dir_getdir(name);
-  char *filename = filesys_get_filename(name);
+  //printf("filesys_open\n");
+bool full;
+  struct dir *dir = dir_getdir(name,&full);  //printf("0* %d\n",inode_get_cnt(dir_get_inode(dir)));
+
+  if (full == false)
+    return NULL;
+  
+//printf("///////////////////////////////////////open file\n");
+  /*char *filename = filesys_get_filename(name);
+
+if(strcmp(filename,".") != 0){
+  //printf("1*  %d\n",inode_get_cnt(dir_get_inode(dir)));
+  dir_swap_parent(&dir);
+  //printf("2*  %d\n",inode_get_cnt(dir_get_inode(dir)));
+
+}
+
   struct inode *inode = NULL;
 
-if (dir == NULL)
-{
-  printf("dir is null\n");
-}
+
   if (dir != NULL)
     dir_lookup (dir, filename, &inode);
+  if(strcmp(filename,".") == 0)
+    inode = dir_get_inode(dir);
+
+  //printf("3* %d\n",inode_get_cnt(dir_get_inode(dir)));
   dir_close (dir);
 
-  return file_open (inode);
+  //printf("3* node %d\n",inode_get_cnt(inode));
+
+  //printf("filesys_open %d\n",inode_get_inumber(dir_get_inode(dir)));*/
+
+  return file_open (dir_get_inode(dir));
 }
 
 /* Deletes the file named NAME.
@@ -102,9 +128,18 @@ bool
 filesys_remove (const char *name) 
 {
   //struct dir *dir = dir_open_root ();
-  struct dir *dir = dir_getdir(name);
+bool full;
+  struct dir *dir = dir_getdir(name,&full);  //printf("0? %d\n",inode_get_cnt(dir_get_inode(dir)));
+
+if (full == false)
+    return false;
+
+  dir_swap_parent(&dir);
+  //printf("1? %d\n",inode_get_cnt(dir_get_inode(dir)));
   char *filename = filesys_get_filename(name);
+
   bool success = dir != NULL && dir_remove (dir, filename);
+  //printf("2? %d\n",inode_get_cnt(dir_get_inode(dir)));
   dir_close (dir); 
 
   return success;
