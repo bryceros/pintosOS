@@ -11,8 +11,8 @@
 
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
-#define BLOCK_DIRECT 10
-#define BLOCK_INDIRECT 1
+#define BLOCK_DIRECT 4
+#define BLOCK_INDIRECT 9
 #define BLOCK_DOUBLE 1
 #define BLOCK_NUMBER 128
 
@@ -127,47 +127,6 @@ inode_init (void)
 {
   list_init (&open_inodes);
 }
-
-/* Initializes an inode with LENGTH bytes of data and
-   writes the new inode to sector SECTOR on the file system
-   device.
-   Returns true if successful.
-   Returns false if memory or disk allocation fails. */
-/*bool
-inode_create (block_sector_t sector, off_t length)
-{
-  struct inode_disk *disk_inode = NULL;
-  bool success = false;
-
-  ASSERT (length >= 0);
-
-  /* If this assertion fails, the inode structure is not exactly
-     one sector in size, and you should fix that. *?/
-  ASSERT (sizeof *disk_inode == BLOCK_SECTOR_SIZE);
-
-  disk_inode = calloc (1, sizeof *disk_inode);
-  if (disk_inode != NULL)
-    {
-      size_t sectors = bytes_to_sectors (length);
-      disk_inode->length = length;
-      disk_inode->magic = INODE_MAGIC;
-      if (free_map_allocate (sectors, &disk_inode->direct[0])) 
-        {
-          block_write (fs_device, sector, disk_inode);
-          if (sectors > 0) 
-            {
-              static char zeros[BLOCK_SECTOR_SIZE];
-              size_t i;
-              
-              for (i = 0; i < sectors; i++) 
-                block_write (fs_device, disk_inode->direct[0] + i, zeros);
-            }
-          success = true; 
-        } 
-      free (disk_inode);
-    }
-  return success;
-}*/
 
 bool
 //inode_create (block_sector_t sector, off_t length, enum inode_flags type)
@@ -396,6 +355,12 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
   uint8_t *buffer = buffer_;
   off_t bytes_read = 0;
   uint8_t *bounce = NULL;
+
+//printf("size %jd\n",(intmax_t)size);
+//printf("offset %jd\n",(intmax_t)offset);
+//printf("inode->data.length %jd\n",(intmax_t)inode->data.length);
+//printf("inode->data.EOF %jd\n",(intmax_t)inode->data.EOF);
+
 
     if (size > inode->data.length)
       return 0;

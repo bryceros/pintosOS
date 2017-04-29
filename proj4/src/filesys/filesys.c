@@ -86,6 +86,9 @@ filesys_open (const char *name)
 {
   //struct dir *dir = dir_open_root ();
   //printf("filesys_open\n");
+  if (strcmp(name,"") == 0)
+    return NULL;
+
 bool full;
   struct dir *dir = dir_getdir(name,&full);  //printf("0* %d\n",inode_get_cnt(dir_get_inode(dir)));
 
